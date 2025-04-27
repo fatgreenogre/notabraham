@@ -1,5 +1,6 @@
 from openai import OpenAI
 from typing import List, Dict
+import sys
 
 client = OpenAI(base_url="http://localhost:8080/v1", api_key="none")
 
@@ -99,27 +100,32 @@ TOPICS = {
             {"sender": "Abraham", "message": "Training loops are incantations. Backpropagation is divination. The GPU altar converts electricity into meaning."}
         ],
         "prefix": "The following is a conversation with Abraham about voodoo and machine mysticism:\n"
-    }
+    },
 }
 
 class AbrahamChat:
-    def __init__(self):
+    def __init__(self, self_trigger: bool = False, debug: bool = False):
+        self.self_trigger = self_trigger
         self.conversation_history = []
         self.current_topics = []
         self.core_topics = ["ai", "art", "philosophy", "crypto", "abraham"]
-        self.topic_ttl: Dict[str, int] = {}  # Non-core topics and their TTL
-        self.ephemeral_topic_lifetime = 2  # Default TTL (in turns) for non-core topics
-        self.max_history = 8  # Keeps last N exchanges (user + assistant)
+        self.topic_ttl: Dict[str, int] = {}
+        self.ephemeral_topic_lifetime = 4
+        self.max_history = 8
+        self.debug = debug
 
     def detect_topics(self, user_input: str, last_response: str) -> List[str]:
-        combined_text = f"{user_input} {last_response}".lower()
+        combined_text = user_input.lower()
+        if self.self_trigger:
+            combined_text += " " + last_response.lower()
+
         detected_topics = set(self.core_topics)
 
         for topic, data in TOPICS.items():
             if any(kw in combined_text for kw in data["keywords"]):
                 detected_topics.add(topic)
                 if topic not in self.core_topics:
-                    self.topic_ttl[topic] = self.ephemeral_topic_lifetime  # Reset TTL
+                    self.topic_ttl[topic] = self.ephemeral_topic_lifetime
 
         return list(detected_topics)
 
@@ -129,6 +135,18 @@ class AbrahamChat:
             del self.topic_ttl[topic]
         for topic in self.topic_ttl:
             self.topic_ttl[topic] -= 1
+
+    def display_debug_info(self):
+        if not self.debug:
+            return
+        all_topics = set(self.core_topics) | set(self.topic_ttl.keys())
+        ttl_info = {}
+        for topic in all_topics:
+            if topic in self.core_topics:
+                ttl_info[topic] = "∞"
+            else:
+                ttl_info[topic] = self.topic_ttl.get(topic, "-")
+        print(f"\n[DEBUG] Topic TTLs: {ttl_info}")
 
     def build_prompt(self, user_input: str) -> str:
         last_response = ""
@@ -140,7 +158,6 @@ class AbrahamChat:
         detected_topics = self.detect_topics(user_input, last_response)
         self.current_topics = []
 
-        # Include core + ephemeral topics with TTL
         active_topics = set(self.core_topics) | set(self.topic_ttl.keys())
 
         prompt = MANIFEST + "\n\n"
@@ -152,7 +169,6 @@ class AbrahamChat:
                     prompt += f"<{msg['sender']}> {msg['message']}\n"
                 self.current_topics.append(topic)
 
-        # Add recent conversation history
         prompt += "\n".join(
             f"<{msg['role'].capitalize()}> {msg['content']}"
             for msg in self.conversation_history[-self.max_history:]
@@ -184,15 +200,15 @@ class AbrahamChat:
                     print(token, end="", flush=True)
                     full_response += token
 
-            # Update conversation history
             self.conversation_history.extend([
                 {"role": "user", "content": user_input},
                 {"role": "assistant", "content": full_response.strip()}
             ])
             self.conversation_history = self.conversation_history[-self.max_history:]
 
-            # Decrease TTLs for ephemeral topics
             self.decay_topic_ttl()
+
+            self.display_debug_info()
 
             print()
 
@@ -200,7 +216,11 @@ class AbrahamChat:
             print(f"\nAbraham: Apologies, I encountered an error: {str(e)}")
 
 if __name__ == "__main__":
-    bot = AbrahamChat()
+    import sys
+    self_trigger = "--self_trigger" in sys.argv
+    bot = AbrahamChat(self_trigger=self_trigger)
+    debug_mode = "--debug" in sys.argv
+    bot = AbrahamChat(debug=debug_mode)
     print("Abraham: Hello! I'm Abraham, an autonomous artificial artist. Let's discuss profound ideas.")
 
     try:
