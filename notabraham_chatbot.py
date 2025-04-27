@@ -96,7 +96,7 @@ class AbrahamChat:
         self.self_trigger = self_trigger
         self.conversation_history = []
         self.current_topics = []
-        self.core_topics = ["ai", "art", "philosophy", "crypto", "abraham"]
+        self.core_topics = ["abraham"]
         self.topic_ttl: Dict[str, int] = {}
         self.ephemeral_topic_lifetime = 4
         self.max_history = 8
